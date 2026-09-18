@@ -5,11 +5,20 @@ La lógica de SQLite y las rutas de la API se incorporarán en los siguientes
 Baby Steps, una funcionalidad comprobable por vez.
 """
 
+from pathlib import Path
+
 from flask import Flask, render_template
 
+from database import init_app
 
-# Flask busca las plantillas HTML dentro de la carpeta templates.
+
 app = Flask(__name__)
+app.config.from_mapping(
+    # instance permite guardar datos locales que no deben versionarse.
+    DATABASE=Path(app.instance_path) / "techpay.db"
+)
+Path(app.instance_path).mkdir(parents=True, exist_ok=True)
+init_app(app)
 
 
 @app.get("/")
