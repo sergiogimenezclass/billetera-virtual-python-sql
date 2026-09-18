@@ -628,22 +628,31 @@ operationForm.addEventListener("submit", async (event) => {
     return;
   }
 
-  if (operation === "transfer" && amount > wallet.balanceARS) {
-    showFormError("No tenés saldo suficiente para realizar esta transferencia.");
-    return;
-  }
-
   if (operation === "transfer") {
-    wallet.balanceARS -= amount;
-    const transaction = { description: `Transferencia a ${detail}`, amount, type: "expense" };
-    wallet.transactions.unshift(transaction);
-    addMovement(transaction);
-    showToast("Transferencia realizada correctamente");
-  }
+    try {
+      /* Flask vuelve a validar el saldo antes de ejecutar el descuento. */
+      const response = await fetch("/api/transactions/transfer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount, alias: detail })
+      });
+      const data = await response.json();
 
-  updateBalance();
-  saveWallet();
-  closeOperationModal();
+      if (!response.ok) {
+        throw new Error(data.error || "No se pudo realizar la transferencia");
+      }
+
+      /* La respuesta del servidor reemplaza el estado local anterior. */
+      wallet.balanceARS = data.balanceARS;
+      wallet.transactions.unshift(data.transaction);
+      addMovement(data.transaction);
+      updateBalance();
+      closeOperationModal();
+      showToast("Transferencia realizada correctamente");
+    } catch (error) {
+      showFormError(error.message);
+    }
+  }
 });
 
 /* La interfaz se completa después de recibir el estado desde Flask. */
