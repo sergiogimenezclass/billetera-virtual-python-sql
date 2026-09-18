@@ -562,7 +562,7 @@ operationModal.addEventListener("click", (event) => {
 });
 
 /* Este submit concentra las validaciones de ingreso, transferencia y compra de dólares. */
-operationForm.addEventListener("submit", (event) => {
+operationForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const operation = operationModal.dataset.operation;
@@ -593,6 +593,36 @@ operationForm.addEventListener("submit", (event) => {
     return;
   }
 
+  if (operation === "income") {
+    try {
+      /* Enviamos JSON a Flask; el servidor será quien modifique SQLite. */
+      const response = await fetch("/api/transactions/income", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount,
+          description: detail || "Dinero ingresado"
+        })
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "No se pudo registrar el ingreso");
+      }
+
+      /* Usamos la respuesta del servidor como fuente de verdad para la interfaz. */
+      wallet.balanceARS = data.balanceARS;
+      wallet.transactions.unshift(data.transaction);
+      addMovement(data.transaction);
+      updateBalance();
+      closeOperationModal();
+      showToast("Ingreso registrado correctamente");
+    } catch (error) {
+      showFormError(error.message);
+    }
+    return;
+  }
+
   if (operation === "transfer" && !detail) {
     showFormError("Ingresá el alias del destinatario.");
     return;
@@ -603,13 +633,7 @@ operationForm.addEventListener("submit", (event) => {
     return;
   }
 
-  if (operation === "income") {
-    wallet.balanceARS += amount;
-    const transaction = { description: detail || "Dinero ingresado", amount, type: "income" };
-    wallet.transactions.unshift(transaction);
-    addMovement(transaction);
-    showToast("Ingreso registrado correctamente");
-  } else {
+  if (operation === "transfer") {
     wallet.balanceARS -= amount;
     const transaction = { description: `Transferencia a ${detail}`, amount, type: "expense" };
     wallet.transactions.unshift(transaction);
