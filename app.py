@@ -5,6 +5,7 @@ La lógica de SQLite y las rutas de la API se incorporarán en los siguientes
 Baby Steps, una funcionalidad comprobable por vez.
 """
 
+import sqlite3
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
@@ -180,6 +181,43 @@ def create_transfer():
             },
         }
     ), 201
+
+
+@app.get("/api/contacts")
+def contacts_data():
+    """Devuelve los contactos ordenados por el momento en que se crearon."""
+    database = get_db()
+    contacts = database.execute(
+        "SELECT id, name, alias, color FROM contacts ORDER BY id"
+    ).fetchall()
+    return jsonify({"contacts": [dict(contact) for contact in contacts]})
+
+
+@app.post("/api/contacts")
+def create_contact():
+    """Valida y guarda un contacto nuevo en SQLite."""
+    payload = request.get_json(silent=True) or {}
+    name = str(payload.get("name", "")).strip()
+    alias = str(payload.get("alias", "")).strip().lower()
+
+    if not name or not alias:
+        return jsonify({"error": "El nombre y el alias son obligatorios"}), 400
+
+    database = get_db()
+    try:
+        contact = database.execute(
+            """
+            INSERT INTO contacts (name, alias, color)
+            VALUES (?, ?, ?)
+            RETURNING id, name, alias, color
+            """,
+            (name, alias, "a4"),
+        ).fetchone()
+        database.commit()
+    except sqlite3.IntegrityError:
+        return jsonify({"error": "Ese alias ya está guardado"}), 409
+
+    return jsonify({"contact": dict(contact)}), 201
 
 
 if __name__ == "__main__":
