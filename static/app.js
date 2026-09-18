@@ -495,7 +495,7 @@ contactModal.addEventListener("click", (event) => {
 });
 
 /* submit evita la recarga del navegador y permite validar antes de guardar. */
-contactForm.addEventListener("submit", (event) => {
+contactForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const name = contactName.value.trim();
   const alias = contactAlias.value.trim().toLowerCase();
@@ -506,17 +506,28 @@ contactForm.addEventListener("submit", (event) => {
     return;
   }
 
-  if (wallet.contacts.some((contact) => contact.alias === alias)) {
-    contactFormError.textContent = "Ese alias ya está guardado.";
-    contactFormError.classList.remove("is-hidden");
-    return;
-  }
+  try {
+    /* El servidor vuelve a validar y guarda el contacto en SQLite. */
+    const response = await fetch("/api/contacts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, alias })
+    });
+    const data = await response.json();
 
-  wallet.contacts.push({ id: Date.now(), name, alias, color: "a4" });
-  renderContacts();
-  saveWallet();
-  closeContactModal();
-  showToast("Contacto guardado correctamente");
+    if (!response.ok) {
+      throw new Error(data.error || "No se pudo guardar el contacto");
+    }
+
+    /* Usamos el registro creado por SQLite, incluido su id definitivo. */
+    wallet.contacts.push(data.contact);
+    renderContacts();
+    closeContactModal();
+    showToast("Contacto guardado correctamente");
+  } catch (error) {
+    contactFormError.textContent = error.message;
+    contactFormError.classList.remove("is-hidden");
+  }
 });
 
 /* Cada pestaña cambia el criterio, pero reutiliza la misma función de filtrado. */
