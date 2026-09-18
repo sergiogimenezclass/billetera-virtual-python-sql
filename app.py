@@ -220,6 +220,62 @@ def create_contact():
     return jsonify({"contact": dict(contact)}), 201
 
 
+@app.post("/api/services/<int:service_id>/pay")
+def pay_service(service_id):
+    """Paga un servicio y crea su egreso dentro de SQLite."""
+    database = get_db()
+    service = database.execute(
+        "SELECT id, name, amount, paid FROM services WHERE id = ?",
+        (service_id,),
+    ).fetchone()
+
+    if service is None:
+        return jsonify({"error": "El servicio no existe"}), 404
+    if service["paid"]:
+        return jsonify({"error": "El servicio ya fue pagado"}), 400
+
+    wallet = database.execute(
+        "SELECT balance_ars FROM wallet WHERE id = 1"
+    ).fetchone()
+    if wallet is None:
+        return jsonify({"error": "La billetera no está inicializada"}), 500
+    if service["amount"] > wallet["balance_ars"]:
+        return jsonify({"error": "No hay saldo suficiente"}), 400
+
+    new_balance = wallet["balance_ars"] - service["amount"]
+    database.execute(
+        "UPDATE wallet SET balance_ars = ? WHERE id = 1",
+        (new_balance,),
+    )
+    database.execute(
+        "UPDATE services SET paid = 1 WHERE id = ?",
+        (service_id,),
+    )
+    transaction = database.execute(
+        """
+        INSERT INTO transactions (type, description, amount, currency)
+        VALUES (?, ?, ?, ?)
+        """,
+        ("expense", f"Pago de {service['name']}", service["amount"], "ARS"),
+    )
+    database.commit()
+
+    return jsonify(
+        {
+            "balanceARS": new_balance,
+            "service": {"id": service_id, "paid": True},
+            "transaction": {
+                "id": transaction.lastrowid,
+                "type": "expense",
+                "description": f"Pago de {service['name']}",
+                "amount": service["amount"],
+                "currency": "ARS",
+                "status": "completed",
+            },
+        }
+    ), 200
+
+
 if __name__ == "__main__":
     # El modo debug recarga el servidor cuando se modifica el código.
     app.run(debug=True)
