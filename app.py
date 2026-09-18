@@ -7,7 +7,7 @@ Baby Steps, una funcionalidad comprobable por vez.
 
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 
 from database import get_db, init_app
 
@@ -68,6 +68,63 @@ def wallet_data():
             "services": [dict(service) for service in services],
         }
     )
+
+
+@app.post("/api/transactions/income")
+def create_income():
+    """Registra un ingreso y actualiza el saldo de la billetera.
+
+    El navegador puede validar rápidamente el formulario, pero el servidor
+    siempre debe validar otra vez antes de modificar la base de datos.
+    """
+    payload = request.get_json(silent=True) or {}
+
+    try:
+        amount = float(payload.get("amount", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "El importe debe ser un número"}), 400
+
+    if amount <= 0:
+        return jsonify({"error": "El importe debe ser mayor que cero"}), 400
+
+    description = str(payload.get("description", "Dinero ingresado")).strip()
+    if not description:
+        description = "Dinero ingresado"
+
+    database = get_db()
+    wallet = database.execute(
+        "SELECT balance_ars FROM wallet WHERE id = 1"
+    ).fetchone()
+    if wallet is None:
+        return jsonify({"error": "La billetera no está inicializada"}), 500
+
+    new_balance = wallet["balance_ars"] + amount
+    database.execute(
+        "UPDATE wallet SET balance_ars = ? WHERE id = 1",
+        (new_balance,),
+    )
+    transaction = database.execute(
+        """
+        INSERT INTO transactions (type, description, amount, currency)
+        VALUES (?, ?, ?, ?)
+        """,
+        ("income", description, amount, "ARS"),
+    )
+    database.commit()
+
+    return jsonify(
+        {
+            "balanceARS": new_balance,
+            "transaction": {
+                "id": transaction.lastrowid,
+                "type": "income",
+                "description": description,
+                "amount": amount,
+                "currency": "ARS",
+                "status": "completed",
+            },
+        }
+    ), 201
 
 
 if __name__ == "__main__":
