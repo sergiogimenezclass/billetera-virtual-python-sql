@@ -127,6 +127,61 @@ def create_income():
     ), 201
 
 
+@app.post("/api/transactions/transfer")
+def create_transfer():
+    """Registra una transferencia si la billetera tiene saldo suficiente."""
+    payload = request.get_json(silent=True) or {}
+
+    try:
+        amount = float(payload.get("amount", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "El importe debe ser un número"}), 400
+
+    alias = str(payload.get("alias", "")).strip()
+    if amount <= 0:
+        return jsonify({"error": "El importe debe ser mayor que cero"}), 400
+    if not alias:
+        return jsonify({"error": "El alias es obligatorio"}), 400
+
+    database = get_db()
+    wallet = database.execute(
+        "SELECT balance_ars FROM wallet WHERE id = 1"
+    ).fetchone()
+    if wallet is None:
+        return jsonify({"error": "La billetera no está inicializada"}), 500
+    if amount > wallet["balance_ars"]:
+        return jsonify({"error": "No hay saldo suficiente"}), 400
+
+    new_balance = wallet["balance_ars"] - amount
+    description = f"Transferencia a {alias}"
+    database.execute(
+        "UPDATE wallet SET balance_ars = ? WHERE id = 1",
+        (new_balance,),
+    )
+    transaction = database.execute(
+        """
+        INSERT INTO transactions (type, description, amount, currency)
+        VALUES (?, ?, ?, ?)
+        """,
+        ("expense", description, amount, "ARS"),
+    )
+    database.commit()
+
+    return jsonify(
+        {
+            "balanceARS": new_balance,
+            "transaction": {
+                "id": transaction.lastrowid,
+                "type": "expense",
+                "description": description,
+                "amount": amount,
+                "currency": "ARS",
+                "status": "completed",
+            },
+        }
+    ), 201
+
+
 if __name__ == "__main__":
     # El modo debug recarga el servidor cuando se modifica el código.
     app.run(debug=True)
