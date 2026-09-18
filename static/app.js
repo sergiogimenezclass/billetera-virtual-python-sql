@@ -96,61 +96,7 @@ async function loadWalletFromServer() {
   filterMovements();
 }
 
-/* localStorage solo guarda texto, por eso convertimos el array con JSON.stringify. */
-function saveWallet() {
-  localStorage.setItem("techpay_saldo_ars", String(wallet.balanceARS));
-  localStorage.setItem("techpay_saldo_usd", String(wallet.balanceUSD));
-  localStorage.setItem("techpay_transacciones", JSON.stringify(wallet.transactions));
-  localStorage.setItem("techpay_contactos", JSON.stringify(wallet.contacts));
-  localStorage.setItem("techpay_servicios", JSON.stringify(wallet.services));
-}
-
-/* Si todavía no hay contactos guardados, la aplicación comienza con datos de ejemplo. */
-function loadContacts() {
-  const defaultContacts = [
-    { id: 1, name: "Lucas", alias: "lucas.dev", color: "a1" },
-    { id: 2, name: "Camila", alias: "camila.ui", color: "a2" },
-    { id: 3, name: "Mateo", alias: "mateo.design", color: "a3" },
-    { id: 4, name: "Sofía", alias: "sofia.crea", color: "a4" }
-  ];
-  const savedContacts = localStorage.getItem("techpay_contactos");
-
-  if (!savedContacts) {
-    wallet.contacts = defaultContacts;
-    return;
-  }
-
-  try {
-    const parsedContacts = JSON.parse(savedContacts);
-    wallet.contacts = Array.isArray(parsedContacts) ? parsedContacts : defaultContacts;
-  } catch (error) {
-    wallet.contacts = defaultContacts;
-    showToast("No pudimos recuperar los contactos");
-  }
-}
-
-/* Los servicios también forman parte del estado porque pueden pasar a "pagado". */
-function loadServices() {
-  const defaultServices = [
-    { id: "electricity", name: "Energía Sur", due: "Vence el 22 Sep", amount: 18500, icon: "⚡", color: "electricity", paid: false },
-    { id: "internet", name: "FibraNet", due: "Vence el 25 Sep", amount: 12400, icon: "◉", color: "internet", paid: false },
-    { id: "phone", name: "Celular Móvil", due: "Vence el 28 Sep", amount: 8900, icon: "⌁", color: "phone", paid: false }
-  ];
-  const savedServices = localStorage.getItem("techpay_servicios");
-
-  if (!savedServices) {
-    wallet.services = defaultServices;
-    return;
-  }
-
-  try {
-    const parsedServices = JSON.parse(savedServices);
-    wallet.services = Array.isArray(parsedServices) ? parsedServices : defaultServices;
-  } catch (error) {
-    wallet.services = defaultServices;
-    showToast("No pudimos recuperar los servicios");
-  }
-}
+/* Desde esta versión, la persistencia pertenece a SQLite y no al navegador. */
 
 /* Centralizar el formato evita repetir la misma configuración regional. */
 function formatMoney(amount) {
