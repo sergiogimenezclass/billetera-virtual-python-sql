@@ -171,13 +171,14 @@ async function loadExchangeRate() {
   exchangeStatus.textContent = "Actualizando...";
 
   try {
-    const response = await fetch("https://dolarapi.com/v1/dolares/oficial");
+    /* El navegador consulta nuestra API, no el servicio financiero externo. */
+    const response = await fetch("/api/exchange");
     if (!response.ok) throw new Error("No se pudo consultar la cotización");
 
     const data = await response.json();
-    exchangeRate.buy = Number(data.compra) || exchangeRate.buy;
-    exchangeRate.sell = Number(data.venta) || exchangeRate.sell;
-    exchangeStatus.textContent = "Actualizado ahora";
+    exchangeRate.buy = Number(data.buy) || exchangeRate.buy;
+    exchangeRate.sell = Number(data.sell) || exchangeRate.sell;
+    exchangeStatus.textContent = data.source === "fallback" ? "Cotización de referencia" : "Actualizado ahora";
   } catch (error) {
     exchangeStatus.textContent = "Cotización de referencia";
   }
