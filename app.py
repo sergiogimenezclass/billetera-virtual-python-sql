@@ -278,9 +278,8 @@ def pay_service(service_id):
     ), 200
 
 
-@app.get("/api/exchange")
-def exchange_rate():
-    """Devuelve la cotización oficial o un valor de referencia de respaldo."""
+def get_exchange_values():
+    """Obtiene la cotización y centraliza el valor de respaldo."""
     fallback = {"buy": 1180, "sell": 1220}
 
     try:
@@ -289,10 +288,72 @@ def exchange_rate():
             data = json.loads(response.read().decode("utf-8"))
         buy = float(data["compra"])
         sell = float(data["venta"])
-        return jsonify({"buy": buy, "sell": sell, "source": "api"})
+        return {"buy": buy, "sell": sell, "source": "api"}
     except (KeyError, TypeError, ValueError, OSError, json.JSONDecodeError):
         # Un fallback permite probar la aplicación incluso sin conexión.
-        return jsonify({**fallback, "source": "fallback"})
+        return {**fallback, "source": "fallback"}
+
+
+@app.get("/api/exchange")
+def exchange_rate():
+    """Devuelve la cotización oficial o un valor de referencia de respaldo."""
+    return jsonify(get_exchange_values())
+
+
+@app.post("/api/transactions/currency")
+def create_currency_purchase():
+    """Compra dólares usando pesos y registra la operación en SQLite."""
+    payload = request.get_json(silent=True) or {}
+
+    try:
+        ars_amount = float(payload.get("amount", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "El importe debe ser un número"}), 400
+
+    if ars_amount <= 0:
+        return jsonify({"error": "El importe debe ser mayor que cero"}), 400
+
+    exchange = get_exchange_values()
+    usd_amount = ars_amount / exchange["sell"]
+    database = get_db()
+    wallet = database.execute(
+        "SELECT balance_ars, balance_usd FROM wallet WHERE id = 1"
+    ).fetchone()
+    if wallet is None:
+        return jsonify({"error": "La billetera no está inicializada"}), 500
+    if ars_amount > wallet["balance_ars"]:
+        return jsonify({"error": "No hay saldo suficiente en ARS"}), 400
+
+    new_balance_ars = wallet["balance_ars"] - ars_amount
+    new_balance_usd = wallet["balance_usd"] + usd_amount
+    database.execute(
+        "UPDATE wallet SET balance_ars = ?, balance_usd = ? WHERE id = 1",
+        (new_balance_ars, new_balance_usd),
+    )
+    transaction = database.execute(
+        """
+        INSERT INTO transactions (type, description, amount, currency)
+        VALUES (?, ?, ?, ?)
+        """,
+        ("currency", "Compra de dólares", usd_amount, "USD"),
+    )
+    database.commit()
+
+    return jsonify(
+        {
+            "balanceARS": new_balance_ars,
+            "balanceUSD": new_balance_usd,
+            "exchange": exchange,
+            "transaction": {
+                "id": transaction.lastrowid,
+                "type": "currency",
+                "description": "Compra de dólares",
+                "amount": usd_amount,
+                "currency": "USD",
+                "status": "completed",
+            },
+        }
+    ), 201
 
 
 if __name__ == "__main__":
