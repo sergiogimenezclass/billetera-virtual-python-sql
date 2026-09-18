@@ -595,21 +595,29 @@ operationForm.addEventListener("submit", async (event) => {
   }
 
   if (operation === "currency") {
-    if (amount > wallet.balanceARS) {
-      showFormError("No tenés saldo suficiente para comprar dólares.");
-      return;
-    }
+    try {
+      /* La cotización y la modificación de ambos saldos ocurren en Flask. */
+      const response = await fetch("/api/transactions/currency", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount })
+      });
+      const data = await response.json();
 
-    const dollars = amount / exchangeRate.sell;
-    wallet.balanceARS -= amount;
-    wallet.balanceUSD += dollars;
-    const transaction = { description: "Compra de dólares", amount: dollars, type: "currency" };
-    wallet.transactions.unshift(transaction);
-    addMovement(transaction);
-    updateBalance();
-    saveWallet();
-    closeOperationModal();
-    showToast("Compra de dólares realizada");
+      if (!response.ok) {
+        throw new Error(data.error || "No se pudo comprar dólares");
+      }
+
+      wallet.balanceARS = data.balanceARS;
+      wallet.balanceUSD = data.balanceUSD;
+      wallet.transactions.unshift(data.transaction);
+      addMovement(data.transaction);
+      updateBalance();
+      closeOperationModal();
+      showToast("Compra de dólares realizada");
+    } catch (error) {
+      showFormError(error.message);
+    }
     return;
   }
 
