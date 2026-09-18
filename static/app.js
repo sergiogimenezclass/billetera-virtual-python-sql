@@ -228,24 +228,32 @@ function renderServices() {
 }
 
 /* Pagar un servicio modifica saldo, servicio, historial y persistencia como una sola operación. */
-function payService(serviceId) {
+async function payService(serviceId) {
   const service = wallet.services.find((item) => item.id === serviceId);
   if (!service || service.paid) return;
 
-  if (service.amount > wallet.balanceARS) {
-    showToast("No tenés saldo suficiente para pagar este servicio");
-    return;
-  }
+  try {
+    /* El servidor valida saldo y modifica las tres tablas relacionadas. */
+    const response = await fetch(`/api/services/${serviceId}/pay`, {
+      method: "POST"
+    });
+    const data = await response.json();
 
-  service.paid = true;
-  wallet.balanceARS -= service.amount;
-  const transaction = { description: `Pago de ${service.name}`, amount: service.amount, type: "expense" };
-  wallet.transactions.unshift(transaction);
-  addMovement(transaction);
-  renderServices();
-  updateBalance();
-  saveWallet();
-  showToast("Servicio pagado correctamente");
+    if (!response.ok) {
+      throw new Error(data.error || "No se pudo pagar el servicio");
+    }
+
+    /* Aplicamos la respuesta de SQLite al estado que ya está dibujado. */
+    wallet.balanceARS = data.balanceARS;
+    service.paid = data.service.paid;
+    wallet.transactions.unshift(data.transaction);
+    addMovement(data.transaction);
+    renderServices();
+    updateBalance();
+    showToast("Servicio pagado correctamente");
+  } catch (error) {
+    showToast(error.message);
+  }
 }
 
 /* El comprobante lee el movimiento seleccionado, no crea una operación nueva. */
