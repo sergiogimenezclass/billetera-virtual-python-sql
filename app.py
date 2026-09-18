@@ -6,6 +6,8 @@ Baby Steps, una funcionalidad comprobable por vez.
 """
 
 import sqlite3
+import json
+from urllib.request import urlopen
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
@@ -274,6 +276,23 @@ def pay_service(service_id):
             },
         }
     ), 200
+
+
+@app.get("/api/exchange")
+def exchange_rate():
+    """Devuelve la cotización oficial o un valor de referencia de respaldo."""
+    fallback = {"buy": 1180, "sell": 1220}
+
+    try:
+        # Flask consulta la API externa para que el navegador solo conozca nuestra API.
+        with urlopen("https://dolarapi.com/v1/dolares/oficial", timeout=5) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        buy = float(data["compra"])
+        sell = float(data["venta"])
+        return jsonify({"buy": buy, "sell": sell, "source": "api"})
+    except (KeyError, TypeError, ValueError, OSError, json.JSONDecodeError):
+        # Un fallback permite probar la aplicación incluso sin conexión.
+        return jsonify({**fallback, "source": "fallback"})
 
 
 if __name__ == "__main__":
