@@ -72,32 +72,28 @@ const exchangeRate = {
   sell: 1220
 };
 
-/* Recupera el estado guardado para que la billetera sobreviva a una recarga. */
-function loadWallet() {
-  const savedBalanceText = localStorage.getItem("techpay_saldo_ars");
-  const savedBalanceUSDText = localStorage.getItem("techpay_saldo_usd");
-  const savedBalance = Number(savedBalanceText);
-  const savedBalanceUSD = Number(savedBalanceUSDText);
-  const savedTransactions = localStorage.getItem("techpay_transacciones");
+/*
+  El estado inicial ahora llega desde Flask y SQLite.
+  fetch devuelve una promesa porque la respuesta del servidor es asíncrona.
+*/
+async function loadWalletFromServer() {
+  const response = await fetch("/api/wallet");
+  if (!response.ok) throw new Error("No se pudo cargar la billetera");
 
-  if (savedBalanceText !== null && !Number.isNaN(savedBalance) && savedBalance >= 0) {
-    wallet.balanceARS = savedBalance;
-  }
+  const data = await response.json();
+  wallet.balanceARS = data.balanceARS;
+  wallet.balanceUSD = data.balanceUSD;
+  wallet.contacts = data.contacts;
+  wallet.transactions = data.transactions;
+  wallet.services = data.services;
 
-  if (savedBalanceUSDText !== null && !Number.isNaN(savedBalanceUSD) && savedBalanceUSD >= 0) {
-    wallet.balanceUSD = savedBalanceUSD;
-  }
-
-  if (savedTransactions) {
-    try {
-      const parsedTransactions = JSON.parse(savedTransactions);
-      if (Array.isArray(parsedTransactions)) {
-        wallet.transactions = parsedTransactions;
-      }
-    } catch (error) {
-      showToast("No pudimos recuperar todos los movimientos");
-    }
-  }
+  /* Quitamos la lista estática antes de dibujar los registros de SQLite. */
+  movementList.innerHTML = "";
+  renderContacts();
+  renderServices();
+  wallet.transactions.forEach((transaction) => addMovement(transaction));
+  updateBalance();
+  filterMovements();
 }
 
 /* localStorage solo guarda texto, por eso convertimos el array con JSON.stringify. */
@@ -626,13 +622,8 @@ operationForm.addEventListener("submit", (event) => {
   closeOperationModal();
 });
 
-/* La inicialización carga datos, dibuja la interfaz y finalmente consulta la cotización. */
-loadWallet();
-loadContacts();
-renderContacts();
-loadServices();
-renderServices();
-wallet.transactions.slice().reverse().forEach((transaction) => addMovement(transaction));
-updateBalance();
-filterMovements();
+/* La interfaz se completa después de recibir el estado desde Flask. */
+loadWalletFromServer().catch(() => {
+  showToast("No pudimos conectar con el servidor");
+});
 loadExchangeRate();
